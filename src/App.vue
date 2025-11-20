@@ -19,16 +19,7 @@
 
       <section class="answer" v-if="hasAnswer">
         <p class="answer__label fade-stagger">AI 回答</p>
-        <TransitionGroup name="line" tag="div" class="answer__content">
-          <p
-            v-for="(line, index) in answerLines"
-            :key="`${line}-${index}`"
-            class="answer__line"
-            :style="lineDelay(index)"
-          >
-            {{ line }}
-          </p>
-        </TransitionGroup>
+        <div class="answer__markdown" v-html="renderedAnswer"></div>
       </section>
 
       <RagSources :sources="sources" />
@@ -38,8 +29,9 @@
 
 <script setup lang="ts">
 import axios, { AxiosError } from 'axios';
-import { TransitionGroup } from 'vue';
 import { computed, ref } from 'vue';
+import { marked } from 'marked';
+import DOMPurify from 'dompurify';
 import ChatInput from '@/components/ChatInput.vue';
 import RagSources from '@/components/RagSources.vue';
 import type { RagResponse, RagSource } from '@/types';
@@ -55,18 +47,16 @@ const status = ref<{ type: 'success' | 'error' | null; message: string }>({
 
 const API_ENDPOINT = import.meta.env.VITE_RAG_API_URL ?? '/api/rag';
 
-const answerLines = computed(() =>
-  answer.value
-    .split(/\n+/)
-    .map((line: string) => line.trim())
-    .filter(Boolean)
-);
+marked.setOptions({ gfm: true, breaks: true });
 
-const hasAnswer = computed(() => answerLines.value.length > 0);
-
-const lineDelay = (index: number) => ({
-  animationDelay: `${0.15 + index * 0.15}s`
+const renderedAnswer = computed(() => {
+  const raw = answer.value?.trim() ?? '';
+  if (!raw) return '';
+  const html = marked.parse(raw, { async: false }) as string;
+  return DOMPurify.sanitize(html);
 });
+
+const hasAnswer = computed(() => Boolean(answer.value.trim()));
 
 const setStatus = (type: 'success' | 'error', message: string) => {
   status.value = { type, message };
@@ -103,7 +93,7 @@ const handleQuery = async () => {
       if (response?.data?.code === '404') {
         setStatus('error', '请求成功但未命中相关内容 (404)');
       } else {
-        setStatus('error', '无法连接后端服务，请检查 mock 服务是否启动');
+        setStatus('error', '无法连接后端服务，请确认 NRS_backend 是否运行在 8000 端口');
       }
     } else {
       setStatus('error', '出现未知错误，请稍后重试');
@@ -189,6 +179,46 @@ main {
   gap: 0.85rem;
   font-size: 1.05rem;
   line-height: 1.9;
+}
+
+.answer__markdown {
+  width: 100%;
+  padding: 1.5rem;
+  border-radius: 24px;
+  background: var(--card-bg);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+  color: rgba(247, 245, 251, 0.92);
+  font-size: 1.05rem;
+  line-height: 1.9;
+  animation: riseUp 0.85s ease forwards;
+}
+
+.answer__markdown :deep(p + p) {
+  margin-top: 1rem;
+}
+
+.answer__markdown :deep(ul),
+.answer__markdown :deep(ol) {
+  margin: 0.75rem 0 0.75rem 1.5rem;
+}
+
+.answer__markdown :deep(li) {
+  margin-bottom: 0.35rem;
+}
+
+.answer__markdown :deep(code) {
+  background: rgba(255, 255, 255, 0.08);
+  padding: 0.15rem 0.35rem;
+  border-radius: 6px;
+  font-size: 0.9em;
+}
+
+.answer__markdown :deep(pre) {
+  background: rgba(0, 0, 0, 0.4);
+  border-radius: 10px;
+  padding: 1rem;
+  overflow-x: auto;
 }
 
 .answer__line {
